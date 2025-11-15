@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ToDo App with User Login - jQuery</title>
+
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #eef2f7;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+
+    .app-container {
+      background: #fff;
+      width: 400px;
+      padding: 25px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    h1, h2 {
+      text-align: center;
+    }
+
+    input, button {
+      padding: 10px;
+      font-size: 14px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+    }
+
+    .login-section, .todo-section {
+      display: none;
+    }
+
+    .login-section.active, .todo-section.active {
+      display: block;
+    }
+
+    .input-area {
+      display: flex;
+      margin-top: 10px;
+    }
+
+    #new-task {
+      flex: 1;
+      padding: 10px;
+    }
+
+    #add-btn {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      margin-left: 5px;
+      cursor: pointer;
+    }
+
+    ul {
+      list-style: none;
+      padding: 0;
+      margin-top: 20px;
+    }
+
+    li {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px;
+      border-bottom: 1px solid #ddd;
+    }
+
+    li.completed .task-text {
+      text-decoration: line-through;
+      color: gray;
+    }
+
+    .actions button {
+      margin-left: 5px;
+      border: none;
+      border-radius: 4px;
+      padding: 5px 8px;
+      cursor: pointer;
+    }
+
+    .edit { background-color: #ffc107; color: white; }
+    .delete { background-color: #dc3545; color: white; }
+    .logout-btn {
+      background-color: #28a745;
+      color: white;
+      border: none;
+      width: 100%;
+      margin-top: 15px;
+      padding: 10px;
+      cursor: pointer;
+    }
+
+    .user-info {
+      text-align: center;
+      margin-bottom: 10px;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+
+    <!-- Login Section -->
+    <div class="login-section active" id="loginSection">
+      <h1>🔐 Login</h1>
+      <p style="text-align:center;color:#555">Enter your username to continue</p>
+      <input type="text" id="username" placeholder="Enter your name" style="width:100%;margin-top:10px;">
+      <button id="loginBtn" style="width:100%;margin-top:10px;background:#007bff;color:white;border:none;">Login</button>
+    </div>
+
+    <!-- ToDo Section -->
+    <div class="todo-section" id="todoSection">
+      <h2>📝 ToDo List</h2>
+      <div class="user-info" id="userInfo"></div>
+      <div class="input-area">
+        <input type="text" id="new-task" placeholder="Add new task...">
+        <button id="add-btn">Add</button>
+      </div>
+      <ul id="task-list"></ul>
+      <button class="logout-btn" id="logoutBtn">Logout</button>
+    </div>
+
+  </div>
+
+  <script>
+    // -------------------- COOKIE HELPERS --------------------
+    function setCookie(name, value, days) {
+      let expires = "";
+      if (days) {
+        const date = new Date();
+        date.setTime(date.getTime() + days * 24 * 60 * 60 * 1000);
+        expires = "; expires=" + date.toUTCString();
+      }
+      document.cookie = name + "=" + (value || "") + expires + "; path=/";
+    }
+
+    function getCookie(name) {
+      const nameEQ = name + "=";
+      const ca = document.cookie.split(";");
+      for (let i = 0; i < ca.length; i++) {
+        let c = ca[i];
+        while (c.charAt(0) == " ") c = c.substring(1, c.length);
+        if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length, c.length);
+      }
+      return null;
+    }
+
+    function eraseCookie(name) {
+      document.cookie = name + "=; Max-Age=-99999999;";
+    }
+
+    // -------------------- MAIN APP --------------------
+    $(document).ready(function () {
+      let currentUser = getCookie("todoUser");
+      let tasks = [];
+
+      if (currentUser) {
+        loadUserSession(currentUser);
+      }
+
+      // Login user
+      $("#loginBtn").click(function () {
+        const username = $("#username").val().trim();
+        if (username === "") {
+          alert("Please enter your name!");
+          return;
+        }
+        setCookie("todoUser", username, 1);
+        loadUserSession(username);
+      });
+
+      // Logout
+      $("#logoutBtn").click(function () {
+        eraseCookie("todoUser");
+        $("#todoSection").removeClass("active");
+        $("#loginSection").addClass("active");
+      });
+
+      // Load session for user
+      function loadUserSession(username) {
+        $("#loginSection").removeClass("active");
+        $("#todoSection").addClass("active");
+        $("#userInfo").text("Welcome, " + username + "!");
+        tasks = JSON.parse(localStorage.getItem("tasks_" + username)) || [];
+        renderTasks();
+      }
+
+      // Add task
+      $("#add-btn").click(function () {
+        let taskText = $("#new-task").val().trim();
+        if (taskText !== "") {
+          tasks.push(taskText);
+          saveTasks();
+          renderTasks();
+          $("#new-task").val("");
+        }
+      });
+
+      // Press Enter to add task
+      $("#new-task").keypress(function (e) {
+        if (e.which === 13) $("#add-btn").click();
+      });
+
+      // Edit task
+      $(document).on("click", ".edit", function () {
+        let index = $(this).data("index");
+        let newText = prompt("Edit task:", tasks[index]);
+        if (newText && newText.trim() !== "") {
+          tasks[index] = newText.trim();
+          saveTasks();
+          renderTasks();
+        }
+      });
+
+      // Delete task
+      $(document).on("click", ".delete", function () {
+        let index = $(this).data("index");
+        if (confirm("Are you sure to delete this task?")) {
+          tasks.splice(index, 1);
+          saveTasks();
+          renderTasks();
+        }
+      });
+
+      // Mark as complete
+      $(document).on("click", ".task-text", function () {
+        $(this).parent().toggleClass("completed");
+      });
+
+      // Render tasks
+      function renderTasks() {
+        $("#task-list").empty();
+        tasks.forEach((task, index) => {
+          $("#task-list").append(`
+            <li>
+              <span class="task-text">${task}</span>
+              <div class="actions">
+                <button class="edit" data-index="${index}">Edit</button>
+                <button class="delete" data-index="${index}">Delete</button>
+              </div>
+            </li>
+          `);
+        });
+      }
+
+      // Save tasks to localStorage (user-specific)
+      function saveTasks() {
+        let user = getCookie("todoUser");
+        if (user) {
+          localStorage.setItem("tasks_" + user, JSON.stringify(tasks));
+        }
+      }
+    });
+  </script>
+</body>
+</html>
